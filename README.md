@@ -4,7 +4,11 @@ DeepSeek Harness 的**浏览器语音插件**：麦克风语音输入、回复�
 
 > ✅ **已适配 DSH rc.8（当前主线）**：`dsh.bundle` manifest + `conversation.input.dock/left` 槽位按 rc.8 协议实现；含数字人（DUIX）控制、DeepSeek 余额 badge（stats 行）、五态麦克风。`dsh plugin add` 即可安装。
 
-> ⚠️ **本插件是完整方案的一部分**：语音识别/合成依赖配套的 **voice bridge**（Python 服务，whisper/FunASR + Qwen3-TTS），QQ 对话依赖 **NapCatQQ**。请配合完整仓库使用：**[beiyege-01/dsh-voice-ai-girlfriend](https://github.com/beiyege-01/dsh-voice-ai-girlfriend)**（含桥接代码、模型准备、一键启动脚本、安装文档）。
+> 🎥 **成品展示**（抖音）：
+> - [口播视频效果 ①](https://www.douyin.com/user/self?from_tab_name=main&modal_id=7676326565919149339)
+> - [口播视频效果 ②](https://www.douyin.com/user/self?from_tab_name=main&modal_id=7678063553395412259)
+
+> ⚠️ **本插件是完整方案的一部分**：语音识别/合成依赖配套的 **voice bridge**（Python 服务，FunASR + OmniVoice TTS（WSL2 + FlashInfer）），QQ 对话依赖 **NapCatQQ**。请配合完整仓库使用：**[beiyege-01/dsh-voice-ai-girlfriend](https://github.com/beiyege-01/dsh-voice-ai-girlfriend)**（含桥接代码、模型准备、一键启动脚本、安装文档）。
 
 ## 安装
 
@@ -17,9 +21,9 @@ dsh plugin --profile web add github:beiyege-01/dsh-voice-ai-girlfriend-plugin
 ## 功能
 
 - 🎙️ **语音输入**：麦克风 → 桥接 FunASR 中文识别 → 注入对话（连续聆听、自动端点）
-- 🔊 **语音回复**：回复按句子流式 TTS 朗读（Qwen3 声音克隆，音色由参考音频决定）
+- 🔊 **语音回复**：回复流式 TTS 朗读（OmniVoice 声音克隆，跑在 WSL2 + FlashInfer 加速，音色由参考音频决定，支持 600+ 语言）
 - ⚡ **插话/排队**：亮=说话打断回复；灭=回复读完句子排队接上
-- 👧 **数字人窗口**：右侧动画窗（空闲/说话视频，素材自备）
+- 👧 **数字人窗口**：右侧动画窗（空闲/说话视频，素材自备），自动贴右侧插件边缘不被遮挡
 - 💬 **QQ 双向**：QQ 消息注入对话 + 回复文本/语音/图片推送（NapCat）
 - 🎭 **三类预设一键切换**：工具行三个按钮分别循环切换 **TTS 音色 / 数字人形象 / 待机动画**，选择自动记忆（localStorage）。音色（`voices/<名字>/`）、待机（`assets/bg-images/<名字>/`）、形象（共享卷 temp 放 mp4）均可自行添加，无需改代码
 

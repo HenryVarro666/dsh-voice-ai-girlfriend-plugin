@@ -35,7 +35,7 @@ const EXTERNALS = [
 const dshCssModules = {
   name: 'dsh-css-modules',
   setup(build) {
-    build.onLoad({ filter: /\.module\.css$/, namespace: 'file' }, async (args) => {
+    build.onLoad({ filter: /\.css$/, namespace: 'file' }, async (args) => {
       const raw = readFileSync(args.path, 'utf8').replace(/\/\*[\s\S]*?\*\//g, '')
       const tagId = `${PKG_ID}/${basename(args.path)}`
       const map = {}

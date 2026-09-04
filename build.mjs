@@ -42,7 +42,11 @@ const dshCssModules = {
       const css = raw.replace(/\.([_a-zA-Z][\w-]*)/g, (match, name) => {
         if (map[name] === undefined) {
           const hash = createHash('md5').update(`${args.path}:${name}`).digest('hex').slice(0, 6)
-          map[name] = `${hash}_${name}`
+          // CSS identifiers cannot start with a digit; an md5 hex hash often
+          // does (e.g. 6d13ea), which silently drops the whole rule. Ensure the
+          // leading char is a letter so every scoped class is a valid selector.
+          const safeHash = /^[0-9]/.test(hash) ? `a${hash}` : hash
+          map[name] = `${safeHash}_${name}`
         }
         return `.${map[name]}`
       })

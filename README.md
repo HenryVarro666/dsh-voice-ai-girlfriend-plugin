@@ -2,7 +2,7 @@
 
 DeepSeek Harness 的**浏览器语音插件**：麦克风语音输入、回复朗读（TTS）、AI 女友动画窗、QQ 双向对话。
 
-> ✅ **已适配 DSH rc.8（当前主线）**：`dsh.bundle` manifest + `conversation.input.dock/left` 槽位按 rc.8 协议实现；含数字人（DUIX）控制、DeepSeek 余额 badge（stats 行）、五态麦克风。`dsh plugin add` 即可安装。
+> ✅ **已适配 DSH rc.8 与 dsh 0.1.3**：`dsh.bundle` manifest + `conversation.input.dock/left` 槽位按 rc.8 协议实现；**2026-09-05 已在 dsh v0.1.3-alpha.1（profile web-v013）实测通过** —— 聊天节点读取用 0.1.3 的 `useChat` 视图（assistant-step 节点）、桥接 `/api/tts`（语音朗读）与 `/api/dh/speak`（数字人）均正常触发；`build.mjs` 同时产出服务端入口 `lib/index.js` 与内联 `<style>` 的浏览器包，修复 `dsh plugin add` 安装与样式注入。含数字人（DUIX）控制、DeepSeek 余额 badge（stats 行）、五态麦克风。`dsh plugin add` 即可安装。
 
 > 🎥 **成品展示**（抖音）：
 > - [口播视频效果 ①](https://www.douyin.com/user/self?from_tab_name=main&modal_id=7676326565919149339)

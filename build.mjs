@@ -1,8 +1,17 @@
 // voice-ai-girlfriend build: esbuild browser bundle shaped like the DSH
 // client plugin artifact (lib/client.js, __ModuleLoader__ closure). All
 // @deepseek-ai / react imports stay external — the DSH host provides them.
+//
+// CSS modules: dsh (rc.8 and 0.1.3 alike) does NOT auto-load css sidecars.
+// Every client plugin must inject its own <style data-plugin data-plugin-css>
+// tags (hashed class names). This build therefore compiles *.module.css into
+// (a) a local->hashed class map for the TSX and (b) an injected <style> per css
+// module. A server/node entry (lib/index.js) is also emitted so the dsh loader
+// can import the profile entry on rc.8 and 0.1.3.
 import { build } from 'esbuild'
-import { mkdirSync } from 'node:fs'
+import { mkdirSync, readFileSync } from 'node:fs'
+import { createHash } from 'node:crypto'
+import { basename, dirname } from 'node:path'
 
 const PKG_ID = '@beiyege-01/dsh-voice-ai-girlfriend'
 
@@ -14,6 +23,7 @@ const EXTERNALS = [
   '@deepseek-ai/cordis',
   '@deepseek-ai/dsh-client-runtime',
   '@deepseek-ai/dsh-client-ui-conversation',
+  '@deepseek-ai/dsh-client-ui-chat',
   '@deepseek-ai/dsh-client-ui-slots',
   '@deepseek-ai/dsh-client-locale',
   '@deepseek-ai/dsh-invariants',
@@ -21,7 +31,53 @@ const EXTERNALS = [
   '@deepseek-ai/dsh-client-web-react',
 ]
 
+/** dsh-compatible CSS-modules loader: hashes class names, injects <style>. */
+const dshCssModules = {
+  name: 'dsh-css-modules',
+  setup(build) {
+    build.onLoad({ filter: /\.module\.css$/, namespace: 'file' }, async (args) => {
+      const raw = readFileSync(args.path, 'utf8').replace(/\/\*[\s\S]*?\*\//g, '')
+      const tagId = `${PKG_ID}/${basename(args.path)}`
+      const map = {}
+      const css = raw.replace(/\.([_a-zA-Z][\w-]*)/g, (match, name) => {
+        if (map[name] === undefined) {
+          const hash = createHash('md5').update(`${args.path}:${name}`).digest('hex').slice(0, 6)
+          map[name] = `${hash}_${name}`
+        }
+        return `.${map[name]}`
+      })
+      const js = [
+        `const css = ${JSON.stringify(css)};`,
+        `const tagId = ${JSON.stringify(tagId)};`,
+        `if (typeof document !== 'undefined') {`,
+        `  const q = 'style[data-plugin-css=' + JSON.stringify(tagId) + ']';`,
+        `  if (!document.querySelector(q)) {`,
+        `    const el = document.createElement('style');`,
+        `    el.dataset.plugin = ${JSON.stringify(PKG_ID)};`,
+        `    el.dataset.pluginCss = tagId;`,
+        `    el.textContent = css;`,
+        `    document.head.appendChild(el);`,
+        `  }`,
+        `}`,
+        `export default ${JSON.stringify(map)};`,
+      ].join('\n')
+      return { contents: js, loader: 'js', resolveDir: dirname(args.path) }
+    })
+  },
+}
+
 mkdirSync('lib', { recursive: true })
+
+// Server/node half: a deliberate no-op (browser logic lives in client), but
+// the module must EXIST so `dsh` can import the entry when composing the tree.
+await build({
+  entryPoints: ['src/index.ts'],
+  outfile: 'lib/index.js',
+  bundle: false,
+  format: 'esm',
+  platform: 'node',
+  logLevel: 'info',
+})
 
 await build({
   entryPoints: ['src/client/index.ts'],
@@ -31,6 +87,7 @@ await build({
   platform: 'browser',
   jsx: 'automatic',
   external: EXTERNALS,
+  plugins: [dshCssModules],
   banner: {
     js:
       `window.__ModuleLoader__.load({ id: ${JSON.stringify(PKG_ID)}, factory: (require) => {\n` +
@@ -42,4 +99,4 @@ await build({
   logLevel: 'info',
 })
 
-console.log('[voice-ai-girlfriend] build done: lib/client.js (browser)')
+console.log('[voice-ai-girlfriend] build done: lib/index.js + lib/client.js')

@@ -1,6 +1,6 @@
 {
   "name": "@beiyege-01/dsh-voice-ai-girlfriend",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Voice AI girlfriend for DeepSeek Harness: FunASR mic input, Qwen3-TTS voice replies, companion animation window, QQ two-way chat. Needs the repo's voice bridge + NapCat.",
   "type": "module",
   "main": "lib/index.js",

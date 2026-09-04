@@ -23,6 +23,21 @@ const EXTERNALS = [
 
 mkdirSync('lib', { recursive: true })
 
+// Server/node half: the loader imports the profile entry from lib/index.js on
+// the node side. It is a deliberate no-op (everything lives in the browser
+// half); but the module must EXIST so `dsh` (any version >= rc.8 / 0.1.3)
+// can import the entry when it composes the profile plugin tree.
+await build({
+  entryPoints: ['src/index.ts'],
+  outfile: 'lib/index.js',
+  bundle: false,
+  format: 'esm',
+  platform: 'node',
+  logLevel: 'info',
+})
+
+console.log('[voice-ai-girlfriend] build done: lib/index.js (node entry)')
+
 await build({
   entryPoints: ['src/client/index.ts'],
   outfile: 'lib/client.js',

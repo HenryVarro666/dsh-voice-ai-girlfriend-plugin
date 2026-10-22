@@ -1,0 +1,281 @@
+{
+  "date": "2026-10-22",
+  "scope": "public source and reviewed metadata; no weights/credentials/raw media",
+  "files": [
+    {
+      "path": ".github/workflows/checks.yml",
+      "sha256": "ac8dafb047c894894a36998f7e5a236f8930768bd14992e90150623866c10a26",
+      "bytes": 304
+    },
+    {
+      "path": ".gitignore",
+      "sha256": "36e55404a9269c98b885021dbf91d5b702bd9c5a9a1e8ca4da11954bf5672b2f",
+      "bytes": 515
+    },
+    {
+      "path": "PUBLICATION.md",
+      "sha256": "193e68d33a9ba0561db90552e652917fc4de3dc41ae90c0d9eb7bb644b93bb9f",
+      "bytes": 2286
+    },
+    {
+      "path": "PUBLICATION_AUDIT.json",
+      "sha256": "503ee10990198ee68509039e4e5170c0ede58a0c54ee3eb6f24136a46e631a88",
+      "bytes": 1402
+    },
+    {
+      "path": "README.md",
+      "sha256": "d85ea9103b6241df232cfd2c1a91293a2d2bb817f95805380edcb57f7408da97",
+      "bytes": 3915
+    },
+    {
+      "path": "README.zh-CN.md",
+      "sha256": "012f43b67e6aceea9fd10af46e6896f308db965a5f5f3d4426d62a28e0631257",
+      "bytes": 3313
+    },
+    {
+      "path": "build.mjs",
+      "sha256": "d09d48f36e2202e24242650cb7f57fe4a1d4a5855ef61ac1199d70d792c918b1",
+      "bytes": 4086
+    },
+    {
+      "path": "cordis.patch.yml",
+      "sha256": "28d8d4fbf8c3f0e8263b3c9c0132851a23ea853a16db5f290dd58140701683bb",
+      "bytes": 174
+    },
+    {
+      "path": "package-lock.json",
+      "sha256": "eabec7fc18801ea3dd6bc9dafed478dc6e56d5356bf61a67a6e6b8b10f3468c7",
+      "bytes": 17404
+    },
+    {
+      "path": "package.json",
+      "sha256": "f36a8a94d5eb1574c3d3aa30ca980e2c5c0fd022d7810b7658f74316218fe910",
+      "bytes": 1307
+    },
+    {
+      "path": "src/client/BalanceBadge.module.css",
+      "sha256": "2f092fd7f60ee32c2b0fb41fee98dc8ff27746fa7999e8e3938a6aa714df75e8",
+      "bytes": 541
+    },
+    {
+      "path": "src/client/BalanceBadge.tsx",
+      "sha256": "39d941946ab5d120149f634c2678b0316edffed8344d07b1c46b3980342d4699",
+      "bytes": 3206
+    },
+    {
+      "path": "src/client/BridgeStatus.module.css",
+      "sha256": "f184e354943c5a350df79c39137778d74cc410b3163f32c70e5e285c44a8c910",
+      "bytes": 376
+    },
+    {
+      "path": "src/client/BridgeStatus.tsx",
+      "sha256": "83dd773026eca97cef864c6af3ce56083bdb0b2d8ae50809ea7e5aa3025da19d",
+      "bytes": 3705
+    },
+    {
+      "path": "src/client/BusyToggle.module.css",
+      "sha256": "c4ea6ef505c7a193bb5b5e04cdbc89fde2b4d64a47cb0d34ed61e086748572b7",
+      "bytes": 837
+    },
+    {
+      "path": "src/client/BusyToggle.tsx",
+      "sha256": "514659cc5a25bee5532a59459475f22ea819844906057b49c3f92abed85a0f4b",
+      "bytes": 2379
+    },
+    {
+      "path": "src/client/CompanionToggle.module.css",
+      "sha256": "7031871fa4c975e9208d267c74247cc3a6892c2a237c4e9e8970463030759cbf",
+      "bytes": 855
+    },
+    {
+      "path": "src/client/CompanionToggle.tsx",
+      "sha256": "03b366124ab5631ee8094fed2a6bbff6c364bafde2e54d51ddada2602e49dd5e",
+      "bytes": 2146
+    },
+    {
+      "path": "src/client/DigitalHumanToggle.module.css",
+      "sha256": "abcd5712c9c5624d4db58dfae9f7fb6db102ab47ab13dcade323ab7c6b80ed26",
+      "bytes": 849
+    },
+    {
+      "path": "src/client/DigitalHumanToggle.tsx",
+      "sha256": "16640374ece4c914d2199ee1ea23c727eacc4ffe5d37a4d5d72b1b5767c9d4bd",
+      "bytes": 4623
+    },
+    {
+      "path": "src/client/MicButton.module.css",
+      "sha256": "84b5193c6655c5ae7f42a1c317c56e5faa3e13ff992a7bb601798d623f0a0741",
+      "bytes": 2795
+    },
+    {
+      "path": "src/client/MicButton.tsx",
+      "sha256": "8bebc8b83d2c0848540e26638945ee1fdf8bbe8b0830a5fc0e9f79110c958891",
+      "bytes": 8871
+    },
+    {
+      "path": "src/client/PersonaToggle.module.css",
+      "sha256": "81415e6e041d249366983cc9c26a60e47e62bb0c679ef3d5401c5f079cf65aca",
+      "bytes": 1253
+    },
+    {
+      "path": "src/client/PersonaToggle.tsx",
+      "sha256": "f1210d53545046d84da0971bd28a55fce983353b6b2f55f3cf95b491da5b8416",
+      "bytes": 8738
+    },
+    {
+      "path": "src/client/QqPushToggle.module.css",
+      "sha256": "abcd5712c9c5624d4db58dfae9f7fb6db102ab47ab13dcade323ab7c6b80ed26",
+      "bytes": 849
+    },
+    {
+      "path": "src/client/QqPushToggle.tsx",
+      "sha256": "90c315b1e8ad9a5ff97e7aef8faaffa13a24120326e1c373f76e4362fe10e26f",
+      "bytes": 2285
+    },
+    {
+      "path": "src/client/VoiceToggle.module.css",
+      "sha256": "3d578306f91f5f3042cec3bd549238eedb240a218ff3a3ad5de1b51f739e564c",
+      "bytes": 855
+    },
+    {
+      "path": "src/client/VoiceToggle.tsx",
+      "sha256": "2844f0a84ef506cc68c2df30c7c5b4afe1b3177192e85d379ac5c4d9c41f93c8",
+      "bytes": 2864
+    },
+    {
+      "path": "src/client/VoiceToolbar.module.css",
+      "sha256": "5b1e63d8dc624466205b20cffaab425d1a64c989f71590e499de4bf4ac37359b",
+      "bytes": 824
+    },
+    {
+      "path": "src/client/VoiceToolbar.tsx",
+      "sha256": "a43fa5a0a834a58109867c6e2b6ccbeffbf55448d2fbb3c12bc34039c2a25f64",
+      "bytes": 3141
+    },
+    {
+      "path": "src/client/bridge.ts",
+      "sha256": "d13e89fb7daf4e36b85d40de824b5b0c0f421c08faaf75bc6f937ff5bc555247",
+      "bytes": 10045
+    },
+    {
+      "path": "src/client/chip.ts",
+      "sha256": "9da4dc4a257776f5678828f4eaf28cb9201eeae1cbd3c8557e4f3b42dd78ffd8",
+      "bytes": 1489
+    },
+    {
+      "path": "src/client/chips.css",
+      "sha256": "9f72ff5383b6096fa3df281be5d7b43571cf8fb7480910779a55a5893e0feb89",
+      "bytes": 2915
+    },
+    {
+      "path": "src/client/contract.ts",
+      "sha256": "8348a2e911163d5a8255f3dba819ff7d60912d654fcc533c79277638a599b0a2",
+      "bytes": 1983
+    },
+    {
+      "path": "src/client/index.ts",
+      "sha256": "f29fad438d6dafb68abd713f769bf873526641ccf487dd312304bf9b482b27e0",
+      "bytes": 7428
+    },
+    {
+      "path": "src/client/locales.ts",
+      "sha256": "c0da8719faca84541af416f851e7580a7c273b51d9b1ceb51266c0fdd881c3e1",
+      "bytes": 2876
+    },
+    {
+      "path": "src/client/voice/CompanionWindow.module.css",
+      "sha256": "ff11917d78774a07e7283d6cfc7ce2a83ae714593684795488d1eeb9f97e4689",
+      "bytes": 1612
+    },
+    {
+      "path": "src/client/voice/chat-nodes.ts",
+      "sha256": "455c7ded3fccac5f127febf8e8ce9d98b0914cf7a25d9cfbb1b2d7c47050c7fb",
+      "bytes": 816
+    },
+    {
+      "path": "src/client/voice/clean.ts",
+      "sha256": "1f9c0b4761e237a6f7f3089c341e114b1ee76bdcb36fad6901d23d3b95108757",
+      "bytes": 2490
+    },
+    {
+      "path": "src/client/voice/companion-controller.ts",
+      "sha256": "96cffe275a0196d9caa173912901c7576a40ee3e01d9d61970178a2f165c0feb",
+      "bytes": 1757
+    },
+    {
+      "path": "src/client/voice/companion.tsx",
+      "sha256": "6246d3685f3317beab1d1e44cad8dc6cbfbc8d5f2ba8c38149d39a6b732a8a58",
+      "bytes": 31554
+    },
+    {
+      "path": "src/client/voice/qq-bridge.tsx",
+      "sha256": "105cb2e9e4b0955d1cb8dd2610c69e824cd4f97696ddd3e7e1c1c6931155fa18",
+      "bytes": 6709
+    },
+    {
+      "path": "src/client/voice/recorder.ts",
+      "sha256": "f965bcc6f25b05b26b46b8870cd9112f40b783cb2ae11464f05911b8190ca4a5",
+      "bytes": 15850
+    },
+    {
+      "path": "src/client/voice/reply-listener.tsx",
+      "sha256": "246e413267abeac6307382cf76c32b9693343158bc98483f84157d1317c2c624",
+      "bytes": 18832
+    },
+    {
+      "path": "src/client/voice/sentences.ts",
+      "sha256": "facd75614381754a226555ef9dc1762eff8e8765656008daaebe1a261167ef84",
+      "bytes": 3289
+    },
+    {
+      "path": "src/client/voice/speaker.ts",
+      "sha256": "9aa68fe7720e4646f48ddf435cb6f106f1fb02b19499afd7b6953bcc56005741",
+      "bytes": 8470
+    },
+    {
+      "path": "src/client/worklets/mic-capture.ts",
+      "sha256": "82882fc949b0dfd2868f11e7e56f632c5dd1e1a8e94167aa0c68f729ae28c206",
+      "bytes": 4117
+    },
+    {
+      "path": "src/css-modules.d.ts",
+      "sha256": "1b119eae282e4981c7ee24bbcf0ceafe34d57f6d5e6b148b2b7cc7c09cd89513",
+      "bytes": 109
+    },
+    {
+      "path": "src/index.ts",
+      "sha256": "ccd6c0b64abf7be35f64e77bb68e5ff30b69f75fe3ffc9c865bcf867cdee1b90",
+      "bytes": 343
+    },
+    {
+      "path": "src/invariant.ts",
+      "sha256": "1b98bd5c0eeb233b864145f4728fb8dc29335414b7085c43b453217dd17c5823",
+      "bytes": 1141
+    },
+    {
+      "path": "tests/helpers.mjs",
+      "sha256": "6b634db1dc15a4cc482eb254fbd88ab3d80ceab1a689be0d8cff89414be61e27",
+      "bytes": 759
+    },
+    {
+      "path": "tests/streaming.mjs",
+      "sha256": "f02198ffdf7a2de9867e6ece694bcceb60a1b2ca546a083a17567a37b86ac153",
+      "bytes": 2588
+    },
+    {
+      "path": "tests/voice-regression.mjs",
+      "sha256": "f9b52abe13a813404d00e9b65406cf38a506d918da77168c3ad8c8abbc4fbf03",
+      "bytes": 3707
+    },
+    {
+      "path": "tsconfig.json",
+      "sha256": "c33767596e93e51be6d3d650691ab3f1a6d4b52f380aa45491683ede3c33af36",
+      "bytes": 497
+    },
+    {
+      "path": "tsdown.config.ts",
+      "sha256": "2feb2b627c854374cabe60dd8c1dd7c3a62e2362db6c503f42dc05050d72b917",
+      "bytes": 166
+    }
+  ]
+}

@@ -47,6 +47,26 @@ export async function stt(pcm16: ArrayBuffer): Promise<{ text: string; language?
   return resp.json() as Promise<{ text: string; language?: string }>
 }
 
+/**
+ * Semantic end-of-turn check (bridge /api/turn: STT + small LLM, or Smart
+ * Turn v3.2): is the utterance so far a finished turn? In text mode the
+ * answer carries the transcript. Returns null when the bridge lacks the
+ * endpoint or the check fails, so the caller falls back to silence timing.
+ */
+export async function turnCheck(pcm16: ArrayBuffer): Promise<{ complete: boolean; probability: number; text?: string } | null> {
+  try {
+    const resp = await fetch(`${bridgeBase()}/api/turn`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/octet-stream' },
+      body: pcm16,
+    })
+    if (!resp.ok) return null
+    return await resp.json() as { complete: boolean; probability: number; text?: string }
+  } catch {
+    return null
+  }
+}
+
 /** Text to speech: { text } -> 16 kHz mono PCM16 WAV bytes. */
 export async function tts(text: string, signal?: AbortSignal): Promise<ArrayBuffer> {
   const init: RequestInit = {
@@ -61,6 +81,35 @@ export async function tts(text: string, signal?: AbortSignal): Promise<ArrayBuff
     throw new Error(`voice bridge /api/tts failed: ${resp.status} ${body}`.trim())
   }
   return resp.arrayBuffer()
+}
+
+/** Bridge URLs that answered 404 on /api/tts/stream (older bridge). */
+const noTtsStream = new Set<string>()
+
+/**
+ * Streamed TTS: { text } -> the response body, raw 16 kHz mono PCM16 that
+ * arrives while the sentence is being synthesized. Null when the bridge has
+ * no /api/tts/stream (older bridge; use tts() instead).
+ */
+export async function ttsStream(text: string, signal?: AbortSignal): Promise<ReadableStream<Uint8Array> | null> {
+  const base = bridgeBase()
+  if (noTtsStream.has(base)) return null
+  const init: RequestInit = {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ text }),
+  }
+  if (signal !== undefined) init.signal = signal
+  const resp = await fetch(`${base}/api/tts/stream`, init)
+  if (resp.status === 404 || resp.status === 405) {
+    noTtsStream.add(base)
+    return null
+  }
+  if (!resp.ok || resp.body === null) {
+    const body = await resp.text().catch(() => '')
+    throw new Error(`voice bridge /api/tts/stream failed: ${resp.status} ${body}`.trim())
+  }
+  return resp.body
 }
 
 /** Digital-human task state surfaced by the bridge. */
@@ -79,6 +128,8 @@ export interface DhStatus {
   text: string
   pending: number
   updated_at: number
+  /** DUIX 容器/服务状态；只有 state === 'running' 时数字人才真的能出片。 */
+  duix?: { state: string; message: string }
 }
 
 /**

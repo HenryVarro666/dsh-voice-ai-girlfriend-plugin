@@ -5,20 +5,45 @@
  * plus per-chunk RMS). The main thread accumulates chunks and, once speech has
  * started, ends the utterance after `minSilenceMs` of RMS below threshold
  * (or `maxUtteranceMs` hard cap), then hands the concatenated PCM16 to
- * `onUtterance`. One utterance per activation: the caller stops the recorder
- * after the callback fires (click-to-speak-one-turn semantics; continuous
- * listening is a T7 enhancement).
+ * `onUtterance`, then resets for the next utterance. MicButton keeps capture
+ * active until the user switches listening off.
+ *
+ * Semantic endpointing (2026-10-19): with `turnCheck` set, a short pause
+ * (`turnSilenceMs`) sends the utterance so far to the bridge's end-of-turn
+ * check (/api/turn: STT + small LLM, or Smart Turn). "Complete" ends the
+ * utterance right away, passing on the transcript when the check made one;
+ * "incomplete" keeps listening until speech resumes or `incompleteSilenceMs`
+ * of silence. If the check is unavailable the recorder falls back to
+ * `minSilenceMs`.
  */
 import { MIC_CAPTURE_WORKLET_SOURCE } from '../worklets/mic-capture.ts'
 import type { VadStream } from '../bridge.ts'
 
 const DEFAULT_MIN_SILENCE_MS = 1800
+const DEFAULT_TURN_SILENCE_MS = 500
+const DEFAULT_INCOMPLETE_SILENCE_MS = 1800
 const DEFAULT_MAX_UTTERANCE_MS = 30000
 /** Linear amplitude threshold (~ -40 dBFS). */
 const DEFAULT_RMS_THRESHOLD = 0.01
+/** At most the last 30 s go to the check, the bridge's STT limit (16 kHz
+ *  PCM16). Smart Turn keeps only the last 8 s of that itself. */
+const TURN_WINDOW_BYTES = 30 * 16000 * 2
+/** Audio kept from before speech starts (0.5 s), so the first syllable is not clipped. */
+const PRE_ROLL_BYTES = 16000
+/** Audio kept while listening for a barge-in (1.0 s). The bridge VAD sends
+ *  speech_start only after ~0.4 s of voice; those words open the next utterance. */
+const BARGE_IN_KEEP_BYTES = 32000
 
 export interface MicRecorderOptions {
+  /** Silence that ends an utterance when no semantic check is available. */
   minSilenceMs?: number
+  /** Semantic end-of-turn check; null result = unavailable (see class doc).
+   *  `text` is the transcript of `pcm16` when the check ran STT. */
+  turnCheck?: (pcm16: ArrayBuffer) => Promise<{ complete: boolean; text?: string } | null>
+  /** Pause before asking `turnCheck`. */
+  turnSilenceMs?: number
+  /** Longest silence after `turnCheck` said "incomplete" (or has not answered). */
+  incompleteSilenceMs?: number
   maxUtteranceMs?: number
   rmsThreshold?: number
   /** Streamed to the bridge's silero VAD while a reply is playing; its
@@ -45,8 +70,9 @@ export interface MicRecorderOptions {
    *  level above threshold detected, false = utterance ended). The UI uses it
    *  to show the recording state without per-chunk re-renders. */
   onSpeakingChange?: (speaking: boolean) => void
-  /** Called once with the complete silence-endpointed utterance (PCM16). */
-  onUtterance: (pcm16: ArrayBuffer) => void
+  /** Called once with the complete endpointed utterance (PCM16). `text` is
+   *  set when the end-of-turn check already transcribed it (skip STT). */
+  onUtterance: (pcm16: ArrayBuffer, text?: string) => void
 }
 
 /** Default barge-in level (~ -24 dBFS) and hold time.
@@ -77,6 +103,12 @@ export class MicRecorder {
   private interruptHoldStart = 0
   private confirmArmed = false
   private confirmStart = 0
+  // Semantic endpointing for the current pause: 'idle' = not asked yet,
+  // 'pending' = waiting for turnCheck, 'incomplete' = keep listening.
+  // turnSeq invalidates an answer that arrives after speech resumed.
+  private turnState: 'idle' | 'pending' | 'incomplete' = 'idle'
+  private turnSeq = 0
+  private turnUnavailable = false
 
   constructor(private readonly opts: MicRecorderOptions) {}
 
@@ -98,10 +130,11 @@ export class MicRecorder {
 
   /**
    * Barge-in listening mode (during reply playback): chunks are streamed to
-   * the bridge's silero VAD (never accumulated), which fires `speech_start`
+   * the bridge's silero VAD (only the last `BARGE_IN_KEEP_BYTES` are kept),
+   * which fires `speech_start`
    * only for a REAL human voice — TTS echo / music / ambient noise cannot
    * trip it. On `speech_start` the recorder leaves interrupt mode and the
-   * user's ongoing speech accumulates normally.
+   * user's ongoing speech accumulates normally, starting with the kept audio.
    */
   setInterruptMode(enabled: boolean): void {
     if (this.interruptMode === enabled) return
@@ -112,7 +145,9 @@ export class MicRecorder {
       this.opts.vad?.open(() => this.onVadSpeechStart())
     } else {
       this.opts.vad?.close()
-      this.resetBuffers()
+      // Reply over: the last 0.5 s is the pre-roll, in case the user started
+      // talking just before it ended.
+      this.resetBuffers(PRE_ROLL_BYTES)
     }
   }
 
@@ -124,20 +159,29 @@ export class MicRecorder {
     this.interruptMode = false
     this.interruptArmed = false
     this.confirmArmed = false
-    this.resetBuffers()
+    // 打断时接上 speech_start 之前的音频（2026-10-19）：以前这里清空缓冲，
+    // silero 要听到约 0.4 s 人声才报，"我想换个话题聊聊"就只剩"换个话题聊聊"。
+    this.resetBuffers(BARGE_IN_KEEP_BYTES)
+    this.heardVoice()
     this.opts.onSpeechInterrupt?.()
   }
 
-  private resetBuffers(): void {
+  /** Clear the endpointing state; keep only the last `keepBytes` of audio. */
+  private resetBuffers(keepBytes = 0): void {
     if (this.maxTimer !== null) {
       clearTimeout(this.maxTimer)
       this.maxTimer = null
     }
-    this.chunks = []
-    this.chunkBytes = 0
+    this.trimChunks(keepBytes)
     this.speaking = false
     this.interruptArmed = false
     this.confirmArmed = false
+    this.resetTurn()
+  }
+
+  private resetTurn(): void {
+    this.turnState = 'idle'
+    this.turnSeq++
   }
 
   /** Acquire the mic and start the capture worklet. */
@@ -234,7 +278,8 @@ export class MicRecorder {
             this.confirmArmed = false
             this.interruptArmed = false
             this.interruptMode = false
-            this.resetBuffers()
+            this.resetBuffers(BARGE_IN_KEEP_BYTES)
+            this.heardVoice()
           }
         } else {
           this.interruptArmed = false
@@ -245,28 +290,68 @@ export class MicRecorder {
     }
 
     const threshold = this.opts.rmsThreshold ?? DEFAULT_RMS_THRESHOLD
-    if (rms >= threshold) {
-      this.lastVoiceAt = performance.now()
-      if (!this.speaking) {
-        this.speaking = true
-        this.armMaxTimer()
-        this.opts.onSpeakingChange?.(true)
-      }
+    if (rms >= threshold) this.heardVoice()
+  }
+
+  /** Voice now: restart the silence clock and start the utterance if needed. */
+  private heardVoice(): void {
+    this.lastVoiceAt = performance.now()
+    // Speech resumed: the pause is over, a pending answer is stale.
+    if (this.turnState !== 'idle') this.resetTurn()
+    if (!this.speaking) {
+      this.speaking = true
+      this.armMaxTimer()
+      this.opts.onSpeakingChange?.(true)
     }
   }
 
   private onChunk(buffer: ArrayBuffer): void {
     if (this.released || this.paused) return
-    if (this.interruptMode) {
-      // Barge-in mode: stream to the bridge VAD, never accumulate.
-      this.opts.vad?.send(buffer)
-      return
-    }
     this.chunks.push(buffer)
     this.chunkBytes += buffer.byteLength
-    if (!this.speaking) return
+    if (this.interruptMode) {
+      // Barge-in mode: stream to the bridge VAD, keep only the last second.
+      this.opts.vad?.send(buffer)
+      this.trimChunks(BARGE_IN_KEEP_BYTES)
+      return
+    }
+    if (!this.speaking) {
+      // 开口前只留一小段预录（2026-10-19）：以前上一句结束后的静音全攒在这里，
+      // 和下一句一起发给 STT / /api/turn，等半分钟再说话就超过 30 s 上限。
+      this.trimChunks(PRE_ROLL_BYTES)
+      return
+    }
     const silenceMs = performance.now() - this.lastVoiceAt
-    if (silenceMs >= (this.opts.minSilenceMs ?? DEFAULT_MIN_SILENCE_MS)) this.flush()
+    if (this.opts.turnCheck === undefined || this.turnUnavailable) {
+      if (silenceMs >= (this.opts.minSilenceMs ?? DEFAULT_MIN_SILENCE_MS)) this.flush()
+      return
+    }
+    if (this.turnState === 'idle') {
+      if (silenceMs >= (this.opts.turnSilenceMs ?? DEFAULT_TURN_SILENCE_MS)) this.askTurn()
+      return
+    }
+    // 'pending' or 'incomplete': give the speaker room to go on.
+    if (silenceMs >= (this.opts.incompleteSilenceMs ?? DEFAULT_INCOMPLETE_SILENCE_MS)) this.flush()
+  }
+
+  /** Ask the semantic check whether the utterance so far is a finished turn. */
+  private askTurn(): void {
+    this.turnState = 'pending'
+    const seq = this.turnSeq
+    const all = this.concatChunks()
+    const pcm = all.byteLength > TURN_WINDOW_BYTES ? all.slice(all.byteLength - TURN_WINDOW_BYTES) : all
+    void this.opts.turnCheck!(pcm).then((verdict) => {
+      if (this.released || seq !== this.turnSeq || this.turnState !== 'pending') return
+      if (verdict === null) {
+        // Bridge without /api/turn (or it failed): plain silence timing from now on.
+        this.turnUnavailable = true
+        this.turnState = 'idle'
+      } else if (verdict.complete) {
+        this.flush(verdict.text)
+      } else {
+        this.turnState = 'incomplete'
+      }
+    })
   }
 
   private armMaxTimer(): void {
@@ -277,7 +362,7 @@ export class MicRecorder {
     )
   }
 
-  private flush(): void {
+  private flush(text?: string): void {
     if (this.released) return
     if (this.maxTimer !== null) {
       clearTimeout(this.maxTimer)
@@ -286,11 +371,19 @@ export class MicRecorder {
     const pcm = this.chunkBytes > 0 ? this.concatChunks() : null
     this.chunks = []
     this.chunkBytes = 0
+    this.resetTurn()
     if (this.speaking) {
       this.speaking = false
       this.opts.onSpeakingChange?.(false)
     }
-    if (pcm !== null) this.opts.onUtterance(pcm)
+    if (pcm !== null) this.opts.onUtterance(pcm, text)
+  }
+
+  /** Drop the oldest chunks while at least `bytes` would remain (0 = drop all). */
+  private trimChunks(bytes: number): void {
+    while (this.chunks.length > 0 && this.chunkBytes - this.chunks[0]!.byteLength >= bytes) {
+      this.chunkBytes -= this.chunks.shift()!.byteLength
+    }
   }
 
   private concatChunks(): ArrayBuffer {

@@ -271,6 +271,8 @@ export const CompanionWindow = memo(function CompanionWindow({ speaker, companio
   const dhQueueRef = useRef<string[]>([])
   const dhQueueCodeRef = useRef('')
   const dhQueuePlayedRef = useRef(0)
+  /** Poll the bridge DH state now (set by the polling effect). */
+  const dhPollNowRef = useRef<() => void>(() => {})
 
   // Drag-move state.
   const moveRef = useRef<{ startX: number; startY: number; base: { x: number; y: number } } | null>(null)
@@ -501,29 +503,50 @@ export const CompanionWindow = memo(function CompanionWindow({ speaker, companio
     if (dhPlaying) hideTaskFrame()
   }, [dhPlaying, hideTaskFrame])
 
-  // Digital human: poll the bridge task state every 4 s and drive playback.
+  // Digital human: poll the bridge task state and drive playback, every 4 s
+  // when idle and every 1 s while a reply is being turned into video.
+  // 分段视频之间的空档（2026-10-19）：以前固定 4 s 轮询，一段播完时下一段
+  // 往往已经生成好，但要等下一次轮询才进播放队列，段与段之间停 2 s 左右。
   useEffect(() => {
     let cancelled = false
+    let timer = 0
+    let first = true
     const poll = async () => {
       const status = await dhStatus()
-      if (cancelled || status === null) return
-      setDh((prev) => {
-        if (prev === null) return status
-        if (
-          prev.state === status.state &&
-          prev.video_url === status.video_url &&
-          prev.progress === status.progress &&
-          prev.message === status.message
-        ) return prev
-        return status
-      })
-      driveDh(status)
+      if (cancelled) return
+      if (status !== null) {
+        if (first) {
+          first = false
+          // 刷新页面不重播（2026-10-19）：桥接一直保留上一个任务的 done 状态，
+          // 页面加载后第一次轮询会把上一条回复的分段视频从头再播一遍（error
+          // 状态还会补读文字）。加载时已经结束的任务算历史；还在生成的照常播。
+          if (status.code && ['done', 'error', 'discarded'].includes(status.state)) {
+            dhQueueCodeRef.current = status.code
+            handledDhRef.current.add(status.code)
+          }
+        }
+        setDh((prev) => {
+          if (prev === null) return status
+          if (
+            prev.state === status.state &&
+            prev.video_url === status.video_url &&
+            prev.progress === status.progress &&
+            prev.message === status.message
+          ) return prev
+          return status
+        })
+        driveDh(status)
+      }
+      const busy = status?.state === 'tts' || status?.state === 'generating'
+      window.clearTimeout(timer)
+      timer = window.setTimeout(() => void poll(), busy ? 1000 : 4000)
     }
+    dhPollNowRef.current = () => void poll()
     void poll()
-    const timer = window.setInterval(poll, 4000)
     return () => {
       cancelled = true
-      window.clearInterval(timer)
+      window.clearTimeout(timer)
+      dhPollNowRef.current = () => {}
     }
   }, [])
 
@@ -654,6 +677,8 @@ export const CompanionWindow = memo(function CompanionWindow({ speaker, companio
       setDhPlayingBoth(false)
       const vid = dhRef.current
       if (vid !== null) vid.style.opacity = '0'
+      // The next segment may already be done: fetch it now, not on the next tick.
+      dhPollNowRef.current()
     }
   }, [playNextDh, setDhPlayingBoth])
 

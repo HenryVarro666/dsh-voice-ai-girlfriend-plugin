@@ -1,10 +1,10 @@
 /**
  * DigitalHumanToggle: composer tool-row switch for the digital-human (DUIX)
- * talking-head replies. ON (default): replies go to the bridge's video
- * pipeline; OFF: fall back to near-instant sentence TTS. The flip is also
- * pushed to the BRIDGE (POST /api/dh/enable) so it stops warming up /
- * submitting to DUIX — the bridge side used to keep hammering DUIX even with
- * this switch off.
+ * talking-head replies. ON: replies go to the bridge's video pipeline; OFF
+ * (default until the bridge says otherwise): near-instant sentence TTS. The
+ * flip is also pushed to the BRIDGE (POST /api/dh/enable) so it stops warming
+ * up / submitting to DUIX — the bridge side used to keep hammering DUIX even
+ * with this switch off.
  */
 import { memo, useCallback, useEffect, useState } from 'react'
 import type { PropsLocale, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
@@ -17,11 +17,23 @@ import chips from './chips.css'
 
 const DIGITAL_HUMAN_KEY = 's2s.voice.digitalHuman'
 
+// 2026-10-19 修：旧版 localStorage 为空时按「开」处理，挂载时还把它 POST 给
+// 桥接并被写回 bridge-config.json——新浏览器一打开就把服务端配置改成开，
+// 没装 DUIX 时所有回复都进视频队列、一个字都不读。现在空值按「关」，挂载时
+// 反过来以桥接状态为准（见下方 useEffect），只有用户亲手点开关才写桥接。
 export function readDigitalHuman(): boolean {
   try {
-    return localStorage.getItem(DIGITAL_HUMAN_KEY) !== '0'
+    return localStorage.getItem(DIGITAL_HUMAN_KEY) === '1'
   } catch {
-    return true
+    return false
+  }
+}
+
+function writeDigitalHuman(on: boolean): void {
+  try {
+    localStorage.setItem(DIGITAL_HUMAN_KEY, on ? '1' : '0')
+  } catch {
+    // persistence unavailable — state still flips for this session
   }
 }
 
@@ -43,10 +55,23 @@ function DigitalHumanIcon() {
 export const DigitalHumanToggle = memo(function DigitalHumanToggle({ t }: DigitalHumanToggleProps) {
   const [on, setOn] = useState<boolean>(readDigitalHuman)
 
-  // Mount: push the persisted choice to the bridge, so a reload never leaves
-  // the two sides disagreeing (e.g. bridge left ON while this switch is OFF).
+  // Mount: adopt the BRIDGE switch, so a reload never leaves the two sides
+  // disagreeing and a fresh browser never overrides the server config.
+  // Bridge unreachable -> keep the local value.
   useEffect(() => {
-    void dhEnable(readDigitalHuman()).then(() => notifyDhChanged())
+    let cancelled = false
+    void dhStatus().then((s) => {
+      if (cancelled || s === null) return
+      const bridgeOn = s.enabled === true
+      if (bridgeOn !== readDigitalHuman()) {
+        writeDigitalHuman(bridgeOn)
+        setOn(bridgeOn)
+        notifyDhChanged()
+      }
+    })
+    return () => {
+      cancelled = true
+    }
   }, [])
 
   // 生成中 → 按钮周期性绿光：轮询桥接状态（4s，与 companion 同频），只要
@@ -75,11 +100,7 @@ export const DigitalHumanToggle = memo(function DigitalHumanToggle({ t }: Digita
   const toggle = useCallback(() => {
     setOn((previous) => {
       const next = !previous
-      try {
-        localStorage.setItem(DIGITAL_HUMAN_KEY, next ? '1' : '0')
-      } catch {
-        // persistence unavailable — state still flips for this session
-      }
+      writeDigitalHuman(next)
       // Bridge side: OFF stops the queue worker / warmup / DUIX traffic too;
       // ON starts them again. Notify after the POST lands so listeners re-read
       // the authoritative state instead of guessing.

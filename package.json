@@ -25,12 +25,16 @@
   },
   "scripts": {
     "build": "node build.mjs",
-    "prepare": "node build.mjs"
+    "prepare": "node build.mjs",
+    "test": "node --test tests/voice-regression.mjs tests/streaming.mjs",
+    "typecheck": "tsc --project tsconfig.json",
+    "check": "npm test && npm run typecheck && npm run build"
   },
   "files": [
     "lib/",
     "cordis.patch.yml",
-    "README.md"
+    "README.md",
+    "README.zh-CN.md"
   ],
   "peerDependencies": {
     "react": "^18.2.0"

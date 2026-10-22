@@ -11,7 +11,7 @@
 import { build } from 'esbuild'
 import { mkdirSync, readFileSync } from 'node:fs'
 import { createHash } from 'node:crypto'
-import { basename, dirname } from 'node:path'
+import { basename, dirname, relative } from 'node:path'
 
 const PKG_ID = '@beiyege-01/dsh-voice-ai-girlfriend'
 
@@ -38,10 +38,14 @@ const dshCssModules = {
     build.onLoad({ filter: /\.css$/, namespace: 'file' }, async (args) => {
       const raw = readFileSync(args.path, 'utf8').replace(/\/\*[\s\S]*?\*\//g, '')
       const tagId = `${PKG_ID}/${basename(args.path)}`
+      const sourcePath = relative(process.cwd(), args.path).split('\\').join('/')
       const map = {}
       const css = raw.replace(/\.([_a-zA-Z][\w-]*)/g, (match, name) => {
         if (map[name] === undefined) {
-          const hash = createHash('md5').update(`${args.path}:${name}`).digest('hex').slice(0, 6)
+          const hash = createHash('md5')
+            .update(`${sourcePath}:${name}`)
+            .digest('hex')
+            .slice(0, 6)
           // CSS identifiers cannot start with a digit; an md5 hex hash often
           // does (e.g. 6d13ea), which silently drops the whole rule. Ensure the
           // leading char is a letter so every scoped class is a valid selector.

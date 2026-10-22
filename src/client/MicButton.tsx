@@ -2,8 +2,10 @@
  * Mic control for the composer tool row (`conversation.input.left`).
  *
  * Continuous listening mode: click once to start a MicRecorder (mic-capture
- * worklet + 1800 ms silence endpointing); every silence-endpointed utterance
- * is queued, sent to the bridge /api/stt, and injected into the conversation
+ * worklet + 1800 ms silence endpointing, or the bridge's end-of-turn check
+ * when /api/turn is enabled); every endpointed utterance is queued, sent to
+ * the bridge /api/stt (skipped when the check already transcribed it), and
+ * injected into the conversation
  * via `sendText` — serially, one at a time. Listening stays active until the
  * user clicks again (which stops the recorder and drops queued utterances).
  * Starting capture barges in on any reply being read aloud.
@@ -12,7 +14,7 @@ import { memo, useCallback, useEffect, useRef, useState } from 'react'
 import type { PropsLocale, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
 // Type-only: pulls ui-conversation's SlotMap merge for PropsRuntime resolution.
 import type {} from '@deepseek-ai/dsh-client-ui-conversation/client'
-import { stt, VadStream } from './bridge.ts'
+import { stt, turnCheck, VadStream } from './bridge.ts'
 import type { VoiceInjected } from './contract.ts'
 import { MicRecorder } from './voice/recorder.ts'
 import css from './MicButton.module.css'
@@ -44,7 +46,7 @@ export const MicButton = memo(function MicButton({ t, sendText, speaker, interru
   // onSpeakingChange — flips only, no per-chunk re-renders).
   const [voiceActive, setVoiceActive] = useState(false)
   const recorderRef = useRef<MicRecorder | null>(null)
-  const queueRef = useRef<ArrayBuffer[]>([])
+  const queueRef = useRef<{ pcm: ArrayBuffer; text?: string }[]>([])
   const drainRunningRef = useRef(false)
 
   // Release the mic if the control unmounts mid-capture.
@@ -74,10 +76,10 @@ export const MicButton = memo(function MicButton({ t, sendText, speaker, interru
     try {
       while (queueRef.current.length > 0) {
         if (recorderRef.current === null) break // user stopped listening
-        const pcm = queueRef.current.shift()!
+        const item = queueRef.current.shift()!
         setPhase('transcribing')
         try {
-          const { text } = await stt(pcm)
+          const text = item.text ?? (await stt(item.pcm)).text
           if (text !== undefined && text.trim() !== '') {
             await sendText(text.trim())
           }
@@ -107,6 +109,14 @@ export const MicButton = memo(function MicButton({ t, sendText, speaker, interru
     interruptReply()
 
     const recorder = new MicRecorder({
+      // 语义断轮（2026-10-19）：停顿 0.5 s 就问桥接这句话说完没有（默认是
+      // STT + 小 LLM 判文字，说完时顺带返回识别结果，不用再调 STT）；没说完
+      // 就等到 1.2 s 静音再送出。桥接没开 /api/turn（默认关）时还是旧的固定
+      // 1.8 s。真人中文朗读里约 40% 的句子内部有 >= 0.5 s 的停顿（多在逗号
+      // 处），>= 1.2 s 的只有 3.4%，所以兜底从 1.8 s 降到 1.2 s 多截断得不多。
+      turnCheck,
+      turnSilenceMs: 500,
+      incompleteSilenceMs: 1200,
       minSilenceMs: 1800,
       maxUtteranceMs: 30000,
       rmsThreshold: 0.01,
@@ -130,9 +140,9 @@ export const MicButton = memo(function MicButton({ t, sendText, speaker, interru
       onSpeakingChange: (speaking) => {
         setVoiceActive(speaking)
       },
-      onUtterance: (pcm) => {
+      onUtterance: (pcm, text) => {
         // Continuous listening: queue the utterance and drain serially.
-        queueRef.current.push(pcm)
+        queueRef.current.push({ pcm, text })
         void drain()
       },
     })

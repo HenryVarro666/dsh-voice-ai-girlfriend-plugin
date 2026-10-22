@@ -7,8 +7,9 @@
  * Each assistant chat node's text is split into complete sentences; as new
  * complete sentences appear (the node streams via `assistant/chunk`
  * publications), they are fetched from the bridge /api/tts through a serial
- * chain and played back in order through the shared ReplySpeaker's FIFO
- * queue. The trailing partial sentence is not spoken until it completes.
+ * chain (streamed from /api/tts/stream when the bridge has it) and played
+ * back in order through the shared ReplySpeaker's FIFO queue. The trailing
+ * partial sentence is not spoken until it completes.
  *
  * History replay protection: nodes are seeded on first sight (their current
  * complete sentences are marked spoken), so existing/old content never
@@ -21,7 +22,7 @@ import type {} from '@deepseek-ai/dsh-client-ui-conversation/client'
 // Type-only: pulls ui-chat's `useChat` into SessionStandardProps (0.1.3).
 import type {} from '@deepseek-ai/dsh-client-ui-chat/client'
 import type { AssistantChatData } from '@deepseek-ai/dsh-client-ui-chat/client'
-import { tts, dhSpeak, dhStatus, dhDiscard, DH_CHANGE_EVENT } from '../bridge.ts'
+import { tts, ttsStream, dhSpeak, dhStatus, dhDiscard, DH_CHANGE_EVENT } from '../bridge.ts'
 import { readDigitalHuman } from '../DigitalHumanToggle.tsx'
 import type { VoiceInjected } from '../contract.ts'
 import { cleanReplyText } from './clean.ts'
@@ -61,6 +62,13 @@ function nodeText(data: AssistantChatData): string {
     .join('\n')
 }
 
+/** Sentences sentence-TTS would read for this node now (a SETTLED node also
+ *  flushes its trailing partial: the reply ended without a terminator). */
+function speakableSentences(data: AssistantChatData): string[] {
+  const { sentences, partial } = splitSentences(cleanReplyText(nodeText(data), 100000, true))
+  return data.status === 'settled' && partial !== null ? [...sentences, partial] : sentences
+}
+
 /** Full props: framework runtime share + `voice` locale seat + injected face. */
 export type ReplySpeakerMountProps =
   PropsRuntime<'conversation.input.left'> & PropsLocale<'voice'> & VoiceInjected
@@ -83,13 +91,17 @@ export const ReplySpeakerMount = memo(function ReplySpeakerMount({
 
   // Per-node complete sentences already spoken (node.key -> count).
   const spokenRef = useRef(new Map<string, number>())
+  // Nodes that went out through sentence TTS (never re-submit them as video
+  // when DUIX becomes ready mid-reply).
+  const ttsNodesRef = useRef(new Set<string>())
   // History replay protection: baseline anchor. On mount the conversation
   // snapshot can be EMPTY (session history loads asynchronously after a
   // restart), so a one-shot seed there would miss the history and every old
-  // reply would replay. Instead we wait until the first SETTLED assistant
-  // node arrives, then set the baseline to the current max anchor — nothing
-  // at or below it ever speaks. Live (running) nodes are never used for the
-  // baseline, so a fresh reply in a brand-new session still speaks.
+  // reply would replay. Instead we wait for the first non-empty snapshot,
+  // then set the baseline to the max anchor of its FINISHED
+  // (settled/interrupted) assistant nodes — nothing at or below it ever
+  // speaks. A brand-new session's first snapshot holds only the user node,
+  // so its first reply still speaks.
   const baselineRef = useRef<number | null>(null)
   // Serial TTS fetch chain: sentence N+1's fetch starts after N's resolves
   // (playback drains independently through the speaker queue — pipelined).
@@ -110,10 +122,13 @@ export const ReplySpeakerMount = memo(function ReplySpeakerMount({
   // key = user anchor, value = { timer, anchor } (the candidate's anchor).
   const dhLastDebounceRef = useRef(new Map<number, { timer: ReturnType<typeof setTimeout>; anchor: number }>())
   const LAST_DEBOUNCE_MS = 4000
-  // 桥接侧数字人开关（null = 尚未确认）。它现在**可以热切**：本地开关一翻，
-  // 插件会 POST /api/dh/enable，桥接状态变化后广播 DH_CHANGE_EVENT，这里重新
-  // 拉取——所以不能再像以前那样只在挂载时解析一次（关掉就再也回不来）。
+  // 桥接侧数字人「可用」（null = 尚未确认）：开关开着且 DUIX 状态是 running。
+  // 它现在**可以热切**：本地开关一翻，插件会 POST /api/dh/enable，桥接状态
+  // 变化后广播 DH_CHANGE_EVENT，这里重新拉取——所以不能再像以前那样只在
+  // 挂载时解析一次（关掉就再也回不来）。
   // 确认前既不朗读也不提交视频，避免「同一回复先逐句 TTS、又被生成视频」双重播放。
+  // 2026-10-19：开关开着但 DUIX 没起来（冷启动中 / 根本没装）时按 false 处理，
+  // 回复照常逐句朗读，不再全部塞进一个永远出不了片的视频队列。
   const [bridgeDh, setBridgeDh] = useState<boolean | null>(null)
   // Code of the most recently submitted digital-human task (for discard).
   const lastDhCodeRef = useRef<string | null>(null)
@@ -142,13 +157,22 @@ export const ReplySpeakerMount = memo(function ReplySpeakerMount({
   // Track the BRIDGE-side digital-human switch (it can change at runtime): poll
   // it on mount, and re-read it whenever the local toggle announces a change
   // (the plugin POSTs /api/dh/enable first, so the bridge is already updated by
-  // the time we look). Bridge unreachable -> false, i.e. replies still speak
-  // through sentence TTS.
+  // the time we look). Bridge unreachable or DUIX not running -> false, i.e.
+  // replies still speak through sentence TTS. While the switch is on but DUIX
+  // is still coming up, look again every 4 s.
   useEffect(() => {
     let cancelled = false
+    let retry: number | undefined
     const check = (): void => {
+      window.clearTimeout(retry)
       void dhStatus()
-        .then((s) => { if (!cancelled) setBridgeDh(s?.enabled === true) })
+        .then((s) => {
+          if (cancelled) return
+          const enabled = s?.enabled === true
+          const ready = enabled && s?.duix?.state === 'running'
+          setBridgeDh(ready)
+          if (enabled && !ready) retry = window.setTimeout(check, 4000)
+        })
         .catch(() => { if (!cancelled) setBridgeDh(false) })
     }
     check()
@@ -156,6 +180,7 @@ export const ReplySpeakerMount = memo(function ReplySpeakerMount({
     window.addEventListener(DH_CHANGE_EVENT, onChange)
     return () => {
       cancelled = true
+      window.clearTimeout(retry)
       window.removeEventListener(DH_CHANGE_EVENT, onChange)
     }
   }, [])
@@ -188,28 +213,34 @@ export const ReplySpeakerMount = memo(function ReplySpeakerMount({
       return
     }
 
-    // First settled assistant node arrives: freeze the history baseline so
-    // pre-existing replies never replay (page load, session revisit, history
-    // pagination). Running nodes are live replies — they are NOT used here,
-    // so a fresh reply in a new session still speaks.
+    // First NON-EMPTY snapshot: freeze the history baseline so pre-existing
+    // replies never replay (page load, session revisit, history pagination).
+    // History arrives as one batch (user + assistant nodes together), while a
+    // brand-new session first shows only the user node, so its baseline is 0.
+    // Running nodes are live replies — they are NOT used here.
+    // 2026-10-19 修：旧版等到第一条 settled 回复出现才定基线。实测新会话的
+    // 第一条回复在快照里从不以 running 出现（一出现就是 settled），于是它
+    // 成了基线本身，永远不读。
     if (baselineRef.current === null) {
-      let maxAnchor = 0
-      let hasSettled = false
-      for (const node of chatNodes(chat)) {
-        if (node.kind !== 'assistant-step') continue
+      const nodes = chatNodes(chat)
+      if (nodes.length === 0) return
+      let maxFinished = 0
+      for (const node of nodes) {
         const data = assistantData(node)
-        if (data === undefined) continue
-        if (data.status === 'settled') hasSettled = true
-        if (node.anchorSeq > maxAnchor) maxAnchor = node.anchorSeq
+        if (data !== undefined && data.status !== 'running' && node.anchorSeq > maxFinished) maxFinished = node.anchorSeq
       }
-      if (hasSettled && maxAnchor > 0) {
-        baselineRef.current = maxAnchor
-        skipUntilRef.current = maxAnchor
-      }
-      return
+      baselineRef.current = maxFinished
+      skipUntilRef.current = maxFinished
     }
 
     if (dhMode) {
+      // Everything visible now belongs to the video path: mark it spoken, so
+      // switching DH off later reads only what arrives after the switch
+      // (the old code re-read the whole previous reply from its start).
+      for (const node of chatNodes(chat)) {
+        const data = assistantData(node)
+        if (data !== undefined) spokenRef.current.set(node.key, speakableSentences(data).length)
+      }
       // New user turn after a DH-submitted reply: the pending video is stale.
       for (const node of chatNodes(chat)) {
         if (node.kind !== 'user') continue
@@ -261,6 +292,7 @@ export const ReplySpeakerMount = memo(function ReplySpeakerMount({
         if (base !== null && pick.anchor <= base) return
         if (pick.anchor === skipAnchorRef.current) return
         if (dhSentRef.current.has(pick.node.key)) return
+        if (ttsNodesRef.current.has(pick.node.key)) return
         const text = cleanReplyText(nodeText(pick.data), 100000)
         if (text.trim().length < 2) return
         dhSentRef.current.add(pick.node.key)
@@ -306,16 +338,14 @@ export const ReplySpeakerMount = memo(function ReplySpeakerMount({
       if (node.anchorSeq === skipAnchorRef.current) continue
       const data = assistantData(node)
       if (data === undefined || data.status === 'interrupted') continue
-      const { sentences, partial } = splitSentences(cleanReplyText(nodeText(data), 100000))
-      const speakable = data.status === 'settled' && partial !== null
-        ? [...sentences, partial]
-        : sentences
+      const speakable = speakableSentences(data)
       const spoken = spokenRef.current.get(node.key) ?? 0
       if (speakable.length > spoken) {
         for (let i = spoken; i < speakable.length; i++) {
           jobs.push({ anchor: node.anchorSeq, key: node.key, index: i, sentence: speakable[i]! })
         }
         spokenRef.current.set(node.key, speakable.length)
+        ttsNodesRef.current.add(node.key)
       }
     }
     if (jobs.length === 0) return
@@ -329,10 +359,20 @@ export const ReplySpeakerMount = memo(function ReplySpeakerMount({
         if (interruptRef.current || !voiceEnabled()) return
         const controller = new AbortController()
         _registerTtsAbort(controller)
-        return tts(job.sentence, controller.signal)
-          .then((wav) => {
-            if (interruptRef.current || !voiceEnabled()) return
-            speaker.speak(wav)
+        // 流式 TTS（2026-10-19）：bridge 边合成边推 PCM，第一块到了就开始播。
+        // 这一步在整句收完时结束，下一句的请求照旧串行发出；旧 bridge 没有
+        // /api/tts/stream 时退回整句 WAV。
+        return ttsStream(job.sentence, controller.signal)
+          .then((body) => {
+            if (interruptRef.current || !voiceEnabled()) {
+              void body?.cancel().catch(() => {})
+              return
+            }
+            if (body !== null) return speaker.speakStream(body)
+            return tts(job.sentence, controller.signal).then((wav) => {
+              if (interruptRef.current || !voiceEnabled()) return
+              speaker.speak(wav)
+            })
           })
           .catch((err) => {
             if ((err as Error | undefined)?.name !== 'AbortError') {

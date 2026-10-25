@@ -1,5 +1,5 @@
 {
-  "date": "2026-10-22",
+  "date": "2026-10-25",
   "scope": "public source and reviewed metadata; no weights/credentials/raw media",
   "files": [
     {
@@ -229,8 +229,8 @@
     },
     {
       "path": "src/client/voice/speaker.ts",
-      "sha256": "9aa68fe7720e4646f48ddf435cb6f106f1fb02b19499afd7b6953bcc56005741",
-      "bytes": 8470
+      "sha256": "090a2e6ccdb471ff1b278acfacadf5cb0bb1a42421fc1e60f83ece75795b7d29",
+      "bytes": 10148
     },
     {
       "path": "src/client/worklets/mic-capture.ts",
@@ -259,8 +259,8 @@
     },
     {
       "path": "tests/streaming.mjs",
-      "sha256": "f02198ffdf7a2de9867e6ece694bcceb60a1b2ca546a083a17567a37b86ac153",
-      "bytes": 2588
+      "sha256": "ba709f5c2fadde275a60242290d5b86a0a838c8adbadeaf7150a126c9766d5b8",
+      "bytes": 4302
     },
     {
       "path": "tests/voice-regression.mjs",
